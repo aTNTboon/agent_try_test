@@ -12,7 +12,6 @@ from pydantic import SecretStr
 api_key = os.getenv("API_KEY", "sk-4RA02El8XSHwNCQJ2471085cBd97445eB56075DaD82a567d")
 base_url = os.getenv("BASE_URL", "https://dpapi.cn/v1/chat/completions")
 
-
 messages =[
         SystemMessage(content="你是一个有趣的助手，可以回答任何问题。"),
         HumanMessage(content="你好，请问你是谁？"),

@@ -7,9 +7,6 @@ from langchain_community.vectorstores import Chroma
 
 # 初始化（建表）
 
-
-
-
 class DBClient:
     """数据库客户端封装"""
 
@@ -35,7 +32,6 @@ class DBClient:
             )
         ''')
         self.conn.commit()
-
 
     def get_reference(self,ques:str,amount:int=3)->list[str]:
         results=self.vector_store.similarity_search(ques, k=amount)

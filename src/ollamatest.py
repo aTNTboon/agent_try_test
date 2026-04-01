@@ -42,9 +42,6 @@ from langchain_core.messages import (
 
 # 或者直接访问响应对象的字段
 #print(response.message.content)
-
-
-
 model = XunfeiModel(
     api_key="ZXSdpSgEJXFhygMYiiaA",
     api_secret="jDalRRbmMsQBXJeiCUAa",
