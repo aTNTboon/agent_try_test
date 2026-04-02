@@ -1,12 +1,11 @@
-from dataclasses import dataclass
+from openai import BaseModel
 
 
-@dataclass
-class ToolMeta:
+class ToolMeta(BaseModel):
     id: int
     code: str
     name: str
     description: str
     category: str
-    handler: str
     enabled: bool = True
+    handler: str
