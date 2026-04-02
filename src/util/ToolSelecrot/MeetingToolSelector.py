@@ -1,42 +1,69 @@
+from __future__ import annotations
+
 import json
 import re
-import ollama
-from typing import Any, Optional
-from src.util.respository.dbUtil import db_manager as db
-from src.util.BaseToolSelector import BaseToolSelector
-from src.util.entity.ToolMeta import ToolMeta
-from src.util.respository.ToolRespository import get_tool_repository
-from typing import Any, Optional, List
+from typing import TYPE_CHECKING, Any, Callable, List, Optional
 
+
+from src.util.BaseToolSelector import BaseToolSelector
+from src.util.ToolSelecrot.CatagorySelector import CategorySelector
+from src.util.entity.ToolMeta import ToolMeta
+if TYPE_CHECKING:
+    from src.util.respository.ToolRespository import ToolRepository
 
 
 class DefaultToolSelector(BaseToolSelector):
-    def __init__(self):
+    def __init__(
+        self,
+        repository: "ToolRepository | None" = None,
+        category_selector: CategorySelector | None = None,
+        model_caller: Callable[[str], str] | None = None,
+    ):
         super().__init__(
             max_retries=2,
             retry_sleep=0.3,
             default_tool_ids=[2],
         )
         self.model_name = "qwen2.5-fixed"
+        if repository is None:
+            from src.util.respository.ToolRespository import get_tool_repository
 
-    # ========================
-    # 规则（当前禁用）
-    # ========================
+            repository = get_tool_repository()
+        self.repository = repository
+        self.category_selector = category_selector or CategorySelector(self.repository)
+        self.model_caller = model_caller
+
     def rule_route(self, input: dict) -> Optional[List[int]]:
         return None
 
-    # ========================
-    # Prompt
-    # ========================
+    def _normalize_input_categories(self, input_value: Any) -> list[str]:
+        if isinstance(input_value, list):
+            return [str(x).strip() for x in input_value if str(x).strip()]
+        if isinstance(input_value, str) and input_value.strip():
+            return [input_value.strip()]
+        return []
+
+    def _resolve_categories(self, input: dict) -> list[str]:
+        manual_categories = self._normalize_input_categories(input.get("category", []))
+        question = str(input.get("question", "")).strip()
+        auto_categories = self.category_selector.select_categories(question)
+        return self.category_selector.merge_categories(manual_categories, auto_categories)
+
     def build_prompt(self, input: dict) -> str:
         question = str(input.get("question", "")).strip()
-        tools: List[ToolMeta] = get_tool_repository().get_tools_by_categories(input.get("category", []))
-        
+        categories = self._resolve_categories(input)
 
+        if categories:
+            tools: List[ToolMeta] = self.repository.get_tools_by_categories(categories)
+        else:
+            # 没有命中类别时，聚合所有可用类别工具，避免漏召回。
+            all_categories = self.repository.list_categories()
+            tools = self.repository.get_tools_by_categories(all_categories)
 
         tool_text = "\n".join(
             f"{t.id}: {t.name}，作用：{t.description}"
-            for t in tools if t.enabled
+            for t in tools
+            if t.enabled
         )
 
         return f"""你是工具选择助手。
@@ -50,40 +77,30 @@ class DefaultToolSelector(BaseToolSelector):
 """
 
     def build_retry_prompt(self, input: dict) -> str:
-        """
-        retry prompt 可以直接复用 build_prompt，只是加上提示要求严格返回 JSON。
-        """
         base_prompt = self.build_prompt(input)
-
         retry_hint = (
             "注意：请严格按照 JSON 数组格式返回工具 id，例如 [1] 或 [1,2]，"
             "不要返回文字描述或其他内容。\n"
         )
-
         return retry_hint + base_prompt
 
-    # ========================
-    # 模型调用
-    # ========================
     def call_model(self, prompt: str) -> str:
+        if self.model_caller is not None:
+            return self.model_caller(prompt)
+
+        import ollama
+
         result = ollama.chat(
             model=self.model_name,
             messages=[{"role": "user", "content": prompt}],
         )
         return result["message"]["content"].strip()
 
-    # ========================
-    # 解析
-    # ========================
     def parse_response(self, content: str) -> List[int]:
         if not content:
             return []
-
         return self._parse_tool_ids(content)
 
-    # ========================
-    # 内部解析工具
-    # ========================
     def _parse_tool_ids(self, content: str) -> List[int]:
         parsers = [
             self._parse_json,
