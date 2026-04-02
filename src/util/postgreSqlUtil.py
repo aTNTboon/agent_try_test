@@ -1,6 +1,6 @@
 from sqlalchemy import Connection, text
 
-import src.util.dbUtil as db_manager
+import src.util.respository.dbUtil as db_manager
  
 
 class PostgreSqlUtil:

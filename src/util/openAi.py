@@ -1,11 +1,7 @@
-import datetime
-import functools
 import os
 import time
 from langchain.messages import HumanMessage,SystemMessage,AIMessage
 from langchain_community.embeddings import DashScopeEmbeddings
-from openai import OpenAI
-import langchain
 from langchain_openai import ChatOpenAI
 from pydantic import SecretStr
 

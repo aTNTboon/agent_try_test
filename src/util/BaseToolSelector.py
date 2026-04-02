@@ -7,6 +7,8 @@ from typing import Any, Optional
 from langchain_core.runnables import Runnable
 from langchain_core.runnables.config import RunnableConfig
 
+from src.util.entity.ToolMeta import ToolMeta
+
 
 class BaseToolSelector(Runnable, ABC):
     """
@@ -23,22 +25,22 @@ class BaseToolSelector(Runnable, ABC):
         self.max_retries = max_retries
         self.retry_sleep = retry_sleep
         self.default_tool_ids = default_tool_ids or []
-
     # ========================
     # 对外统一入口
     # ========================
-    def query(self, question: str) -> list[int]:
+    def query(self,input) -> list[int]:
+        question = input.get("question", "")
         question = str(question).strip()
         if not question:
             return self.default_tool_ids
 
         # 1️⃣ 规则路由（你要求现在先返回 None）
-        rule_result = self.rule_route(question)
+        rule_result = self.rule_route(input)
         if rule_result is not None:
             return rule_result
 
         # 2️⃣ LLM 路由（带重试）
-        return self._llm_route_with_retry(question)
+        return self._llm_route_with_retry(input)
 
     def invoke(
         self,
@@ -46,18 +48,26 @@ class BaseToolSelector(Runnable, ABC):
         config: RunnableConfig | None = None,
         **kwargs: Any,
     ) -> list[int]:
-        return self.query(str(input))
+
+        if isinstance(input, dict):
+            return self.query(
+                input=input,
+
+            )
+
+        raise ValueError(f"Unsupported input type: {type(input)}")
 
     # ========================
     # 主流程（固定，不允许子类改）
     # ========================
-    def _llm_route_with_retry(self, question: str) -> list[int]:
+    def _llm_route_with_retry(self, input:dict) -> list[int]:
+
         for attempt in range(self.max_retries + 1):
 
             prompt = (
-                self.build_prompt(question)
+                self.build_prompt(input)
                 if attempt == 0
-                else self.build_retry_prompt(question)
+                else self.build_retry_prompt(input)
             )
 
             content = self.call_model(prompt)
@@ -76,17 +86,17 @@ class BaseToolSelector(Runnable, ABC):
     # ========================
 
     @abstractmethod
-    def rule_route(self, question: str) -> Optional[list[int]]:
+    def rule_route(self, input:dict) -> Optional[list[int]]:
         """规则路由（可以返回 None）"""
         pass
 
     @abstractmethod
-    def build_prompt(self, question: str) -> str:
+    def build_prompt(self, input:dict) -> str:
         """构造 prompt"""
         pass
 
     @abstractmethod
-    def build_retry_prompt(self, question: str) -> str:
+    def build_retry_prompt(self, input:dict) -> str:
         """构造 retry prompt"""
         pass
 
